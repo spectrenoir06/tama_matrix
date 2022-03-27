@@ -1,0 +1,4 @@
+web/
+releases/
+*.so
+*.o
