@@ -90,6 +90,8 @@ typedef struct {
 	unsigned char icones;
 } tama_data_bin_t;
 
+void lua_tamalib_set_speed(uint32_t speed);
+
 ]]
 )
 

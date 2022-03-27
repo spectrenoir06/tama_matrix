@@ -1,20 +1,18 @@
 local ffi = require("ffi")
--- local lib = require("lib.tamaMatrix.tamalib")
+local lib = require("lib.tamaMatrix.tamalib")
 local socket = require "socket"
 local json = require("lib.json")
 
 local bit = require("bit")
 
-ffi.cdef[[
-	typedef struct { uint32_t matrix[16]; uint8_t icones; } tama_data_bin_t;
-]]
+local moonshine = require 'lib.moonshine'
 
 
--- lib.lua_tamalib_init()
+lib.lua_tamalib_init(0)
 
 local size = 2
 
-local imageData = love.image.newImageData( 320, 320)
+local imageData = love.image.newImageData( 32, 16)
 
 
 local matrix = {}
@@ -35,21 +33,37 @@ function intro:init() -- Called once, and only once, before entering the state t
 	end
 	imageData:mapPixel( pixelFunction)
 
+	-- moonshine.effects.crt
+	-- moonshine.effects.glow
+	-- moonshine.effects.chromasep
 
-	for i=1, 10 do
-		-- local thread = love.thread.newThread("tama_thread.lua")
-		-- local chan = love.thread.newChannel()
-		-- thread:start(chan)
-		local handle = io.popen("luajit tama_process.lua "..i-1)
-		-- local result = handle:read("*a")
-		-- handle:close()
-		matrix[i] = {
-			handle = handle,
-			port = -1,
-			id = i-1
-		}
-		tama_nb = i
-	end
+	effect = moonshine(moonshine.effects.glow)
+		.chain(moonshine.effects.chromasep).chain(moonshine.effects.scanlines).chain(moonshine.effects.crt)
+
+	effect.parameters = {
+		glow = {strength = 15},
+		crt = {distortionFactor = {1.06, 1.065}},
+		chromasep = { radius=2, angle=2},
+		scanlines = { opacity = 0.4}
+	}
+	-- effect.glow.strength = 5
+	-- effect.chromasep.radius = 1
+
+
+	-- for i=1, 10 do
+	-- 	-- local thread = love.thread.newThread("tama_thread.lua")
+	-- 	-- local chan = love.thread.newChannel()
+	-- 	-- thread:start(chan)
+	-- 	local handle = io.popen("luajit tama_process.lua "..i-1)
+	-- 	-- local result = handle:read("*a")
+	-- 	-- handle:close()
+	-- 	matrix[i] = {
+	-- 		handle = handle,
+	-- 		port = -1,
+	-- 		id = i-1
+	-- 	}
+	-- 	tama_nb = i
+	-- end
 end
 
 function intro:enter(previous) -- Called every time when entering the state
@@ -63,9 +77,13 @@ end
 
 function intro:update(dt)
 	-- self.angle = (self.angle + dt * math.pi/2) % (2*math.pi)
-	-- lib.lua_tamalib_bigstep()
+	lib.lua_tamalib_bigstep()
+	local buf = ffi.new("uint8_t[?]", 72)
+	lib.lua_tamalib_get_matrix_data_bin(buf)
 	-- print(dt)
-	local data, msg_or_ip, port_or_nil = self.udp:receivefrom()
+	-- local data, msg_or_ip, port_or_nil = self.udp:receivefrom()
+	local data = ffi.string(buf, 72)
+	-- print(data, buf, #data)
 	if data then
 		local id = love.data.unpack("I", data, 1)
 		-- print(id)
@@ -92,9 +110,11 @@ function intro:draw()
 	image = love.graphics.newImage(imageData)
 	image:setFilter("nearest")
 	if image then
-		love.graphics.draw(image,0,0,0,size,size)
+		effect(function()
+			love.graphics.draw(image,0,8*20,0,20,20)
+		end)
 	end
-	love.graphics.print(love.timer.getFPS(), 10, 10)
+	-- love.graphics.print(love.timer.getFPS(), 10, 10)
 end
 
 function intro:focus(focus)
@@ -116,27 +136,31 @@ end
 
 function love.keypressed(key)
 	print(key)
-	-- if key == "z" then
-	-- 	lib.lua_tamalib_set_press_A()
-	-- elseif key == "x" then
-	-- 	lib.lua_tamalib_set_press_B()
-	-- elseif key == "c" then
-	-- 	lib.lua_tamalib_set_press_C()
-	-- end
+	if key == "z" then
+		lib.lua_tamalib_set_press_A()
+	elseif key == "x" then
+		lib.lua_tamalib_set_press_B()
+	elseif key == "c" then
+		lib.lua_tamalib_set_press_C()
+	elseif key == "space" then
+		lib.lua_tamalib_set_speed(0)
+	end
 	-- local result = handle:read("*a")
 	-- handle:close()
 	
-	tama_nb = tama_nb + 1
-	local handle = io.popen("luajit tama_process.lua "..tama_nb-1)
+	-- tama_nb = tama_nb + 1
+	-- local handle = io.popen("luajit tama_process.lua "..tama_nb-1)
 end
 
 function love.keyreleased( key )
-	-- if key == "z" then
-	-- 	lib.lua_tamalib_set_release_A()
-	-- elseif key == "x" then
-	-- 	lib.lua_tamalib_set_release_B()
-	-- elseif key == "c" then
-	-- 	lib.lua_tamalib_set_release_C()
-	-- end
+	if key == "z" then
+		lib.lua_tamalib_set_release_A()
+	elseif key == "x" then
+		lib.lua_tamalib_set_release_B()
+	elseif key == "c" then
+		lib.lua_tamalib_set_release_C()
+	elseif key == "space" then
+		lib.lua_tamalib_set_speed(1)
+	end
 end
 return intro

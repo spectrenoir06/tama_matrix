@@ -36,22 +36,17 @@
 #include <getopt.h>
 
 typedef struct {
-	unsigned char matrix[32][16];
-	unsigned char icones[8];
-} tama_data_t;
-
-
-typedef struct {
 	uint32_t id;
 	uint32_t matrix[16];
 	uint8_t icones;
 } tama_data_bin_t;
 
-tama_data_t data;
-tama_data_bin_t data_bin;
+tama_data_bin_t data_bin[2];
+
+// uint8_t flip = 0;
 
 
-#define DEFAULT_FRAMERATE				30 // fps
+#define DEFAULT_FRAMERATE				60 // fps
 
 static exec_mode_t exec_mode = EXEC_MODE_RUN;
 
@@ -234,21 +229,21 @@ static void hal_update_screen(void) {
 
 static void hal_set_lcd_matrix(u8_t x, u8_t y, bool_t val) {
 	// printf("%d, %d, = %d\n", x, y, val);
-	data.matrix[x][y] = val;
-	// int id = x+y*32;
-	// int i = (id/32)
 	if (val)
-		data_bin.matrix[y] |= 1 << x;
+		data_bin[0].matrix[y] |= 1 << x;
 	else
-		data_bin.matrix[y] &= ~(1 << x);
+		data_bin[0].matrix[y] &= ~(1 << x);
+	
+	if (x == 31 && y == 15) {
+		memcpy(&data_bin[1], &data_bin[0], sizeof(tama_data_bin_t));
+	}
 }
 
 static void hal_set_lcd_icon(u8_t icon, bool_t val) {
-	data.icones[icon] = val;
 	if (val)
-		data_bin.icones |= 1 << icon;
+		data_bin[0].icones |= 1 << icon;
 	else
-		data_bin.icones &= ~(1 << icon);
+		data_bin[0].icones &= ~(1 << icon);
 }
 
 u32_t g_freq = 0;
@@ -296,26 +291,17 @@ static hal_t hal = {
 static breakpoint_t* g_breakpoints = NULL;
 
 void lua_tamalib_init(uint32_t id){
-	data_bin.id = id;
+	data_bin[0].id = id;
 	tamalib_register_hal(&hal);
 	tamalib_init(g_program, g_breakpoints, 1000000); // my_breakpoints can be NULL, 1000000 means that timestamps will be expressed in us
 }
-
 
 void lua_tamalib_step() {
 	tamalib_step();
 }
 
-tama_data_t *lua_tamalib_get_data() {
-	return &data;
-}
-
-unsigned char lua_tamalib_get_matrix_data(int x, int y) {
-	return data.matrix[x][y];
-}
-
 void lua_tamalib_get_matrix_data_bin(uint8_t *ptr) {
-	memcpy(ptr, (uint8_t*)&data_bin, sizeof(data_bin));
+	memcpy(ptr, (uint8_t*)&data_bin[1], sizeof(tama_data_bin_t));
 	// return data_bin;
 }
 
@@ -358,6 +344,10 @@ void lua_tamalib_set_press_C() {
 
 void lua_tamalib_set_release_C() {
 	tamalib_set_button(BTN_RIGHT, BTN_STATE_RELEASED);
+}
+
+void lua_tamalib_set_speed(uint32_t speed) {
+	tamalib_set_speed(speed);
 }
 
 
