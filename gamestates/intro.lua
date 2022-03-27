@@ -24,6 +24,14 @@ local tama_nb = 1
 
 function intro:init() -- Called once, and only once, before entering the state the first time
 
+	icones = {}
+	for i=0,7 do
+		icones[i] = love.graphics.newImage( "res/icone"..i..".png")
+		-- icones[i]:setFilter("nearest")
+	end
+
+	icone_bin = 0
+
 	self.udp = socket.udp()
 	self.udp:settimeout(0)
 	self.udp:setsockname('*', 12345)
@@ -103,6 +111,7 @@ function intro:update(dt)
 				end
 			end
 		end
+		icone_bin = love.data.unpack("B", data, 16*4+1+4)
 	end
 end
 
@@ -112,6 +121,23 @@ function intro:draw()
 	if image then
 		effect(function()
 			love.graphics.draw(image,0,8*20,0,20,20)
+			for i=0, 7 do
+				if bit.band((bit.rshift(icone_bin, i)), 1) == 1 then
+					local y = 0
+					if (i> 3) then
+						y = 496
+					end
+					
+					love.graphics.draw(
+						icones[i],
+						(i%4)*160,
+						y,
+						0,
+						3,
+						3
+					)
+				end
+			end
 		end)
 	end
 	-- love.graphics.print(love.timer.getFPS(), 10, 10)
@@ -136,11 +162,11 @@ end
 
 function love.keypressed(key)
 	print(key)
-	if key == "z" then
+	if key == "left" then
 		lib.lua_tamalib_set_press_A()
-	elseif key == "x" then
+	elseif key == "down" then
 		lib.lua_tamalib_set_press_B()
-	elseif key == "c" then
+	elseif key == "right" then
 		lib.lua_tamalib_set_press_C()
 	elseif key == "space" then
 		lib.lua_tamalib_set_speed(0)
@@ -153,11 +179,11 @@ function love.keypressed(key)
 end
 
 function love.keyreleased( key )
-	if key == "z" then
+	if key == "left" then
 		lib.lua_tamalib_set_release_A()
-	elseif key == "x" then
+	elseif key == "down" then
 		lib.lua_tamalib_set_release_B()
-	elseif key == "c" then
+	elseif key == "right" then
 		lib.lua_tamalib_set_release_C()
 	elseif key == "space" then
 		lib.lua_tamalib_set_speed(1)
