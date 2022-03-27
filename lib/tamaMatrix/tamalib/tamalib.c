@@ -472,7 +472,7 @@ void lua_tamalib_state_save(uint8_t *buf) {
 		buf[ctn++] = state->memory[i + MEM_IO_ADDR] & 0xF;
 		// num += SDL_RWwrite(f, buf, 1, 1);
 	}
-	printf("save done %d\n", ctn);
+	// printf("save done %d\n", ctn);
 
 	// if (num != (17 + INT_SLOT_NUM * 3 + MEM_RAM_SIZE + MEM_IO_SIZE)) {
 	// 	fprintf(stderr, "FATAL: Failed to write to state file \"%s\" %u %u !\n", path, num, (23 + INT_SLOT_NUM * 3 + MEMORY_SIZE));

@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 local lib = require("lib.tamaMatrix.tamalib")
--- local socket = require "socket"
+local socket = require "socket"
 local json = require("lib.json")
 
 local bit = require("bit")
@@ -23,7 +23,7 @@ function intro:init() -- Called once, and only once, before entering the state t
 	lib.lua_tamalib_init(0)
 
 	-- local save = love.filesystem.read( "save.state")
-	print(save)
+	-- print(save)
 	if save then
 		local c_str = ffi.new("char[?]", #save + 1)
 		ffi.copy(c_str, save)
@@ -46,9 +46,9 @@ function intro:init() -- Called once, and only once, before entering the state t
 
 	icone_bin = 0
 
-	-- self.udp = socket.udp()
-	-- self.udp:settimeout(0)
-	-- self.udp:setsockname('*', 12345)
+	self.udp = socket.udp()
+	self.udp:settimeout(0)
+	self.udp:setsockname('*', 12345)
 
 	function pixelFunction(x, y, r, g, b, a)
 		return 1, 1, 1, 1
@@ -56,13 +56,14 @@ function intro:init() -- Called once, and only once, before entering the state t
 	imageData:mapPixel( pixelFunction)
 
 	effect = moonshine(moonshine.effects.glow)
-		.chain(moonshine.effects.filmgrain).chain(moonshine.effects.chromasep).chain(moonshine.effects.scanlines).chain(moonshine.effects.crt)
+		.chain(moonshine.effects.filmgrain).chain(moonshine.effects.scanlines).chain(moonshine.effects.crt).chain(moonshine.effects.chromasep)
 
 	effect.parameters = {
-		glow = {strength = 5},
+		glow = {strength = 15},
 		crt = {distortionFactor = {1.06, 1.065}},
-		chromasep = { radius=2, angle=2},
-		scanlines = { opacity = 0.4}
+		chromasep = { radius=4, angle=1},
+		scanlines = { opacity = 0.4, width=4},
+		filmgrain = {opacity = 0.3, size =1}
 	}
 
 
@@ -98,8 +99,27 @@ function intro:update(dt)
 	lib.lua_tamalib_bigstep()
 	local buf = ffi.new("uint8_t[?]", 76)
 	lib.lua_tamalib_get_matrix_data_bin(buf)
-	-- print(dt)
-	-- local data, msg_or_ip, port_or_nil = self.udp:receivefrom()
+
+	local data, msg_or_ip, port_or_nil = self.udp:receivefrom()
+	if data then
+		print(data)
+		if data == "A1" then
+			lib.lua_tamalib_set_press_A()
+		elseif data == "B1" then
+			lib.lua_tamalib_set_press_B()
+		elseif data == "C1" then
+			lib.lua_tamalib_set_press_C()
+		elseif data == "A0" then
+			lib.lua_tamalib_set_release_A()
+		elseif data == "B0" then
+			lib.lua_tamalib_set_release_B()
+		elseif data == "C0" then
+			lib.lua_tamalib_set_release_C()
+		end
+	end
+
+
+	
 	local data = ffi.string(buf, 76)
 	-- print(data, buf, #data)
 	if data then
