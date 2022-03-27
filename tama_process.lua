@@ -35,7 +35,7 @@ udp:settimeout(0)
 udp:setpeername("127.0.0.1", 12345)
 
 while(1) do
-	lib.lua_tamalib_bigstep()
+	lib.lua_tamalib_step()
 	-- for x=0,31 do
 	-- 	for y=0,15 do
 	-- 		-- if  then

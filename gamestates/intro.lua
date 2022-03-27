@@ -1,28 +1,42 @@
 local ffi = require("ffi")
 local lib = require("lib.tamaMatrix.tamalib")
-local socket = require "socket"
+-- local socket = require "socket"
 local json = require("lib.json")
 
 local bit = require("bit")
 
 local moonshine = require 'lib.moonshine'
 
-
-lib.lua_tamalib_init(0)
+local timer = 0
 
 local size = 2
 
 local imageData = love.image.newImageData( 32, 16)
-
-
-local matrix = {}
-
 
 local intro = {}
 
 local tama_nb = 1
 
 function intro:init() -- Called once, and only once, before entering the state the first time
+
+
+	lib.lua_tamalib_init(0)
+
+	-- local save = love.filesystem.read( "save.state")
+	print(save)
+	if save then
+		local c_str = ffi.new("char[?]", #save + 1)
+		ffi.copy(c_str, save)
+
+		lib.lua_tamalib_state_load(c_str)
+	else
+		local save = love.filesystem.read( "res/start.state")
+		if save then
+			local c_str = ffi.new("char[?]", #save + 1)
+			ffi.copy(c_str, save)
+			lib.lua_tamalib_state_load(c_str)
+		end
+	end
 
 	icones = {}
 	for i=0,7 do
@@ -32,9 +46,9 @@ function intro:init() -- Called once, and only once, before entering the state t
 
 	icone_bin = 0
 
-	self.udp = socket.udp()
-	self.udp:settimeout(0)
-	self.udp:setsockname('*', 12345)
+	-- self.udp = socket.udp()
+	-- self.udp:settimeout(0)
+	-- self.udp:setsockname('*', 12345)
 
 	function pixelFunction(x, y, r, g, b, a)
 		return 1, 1, 1, 1
@@ -45,7 +59,7 @@ function intro:init() -- Called once, and only once, before entering the state t
 		.chain(moonshine.effects.filmgrain).chain(moonshine.effects.chromasep).chain(moonshine.effects.scanlines).chain(moonshine.effects.crt)
 
 	effect.parameters = {
-		glow = {strength = 10},
+		glow = {strength = 5},
 		crt = {distortionFactor = {1.06, 1.065}},
 		chromasep = { radius=2, angle=2},
 		scanlines = { opacity = 0.4}
@@ -77,14 +91,16 @@ end
 function intro:resume() -- Called when re-entering a state by Gamestate.pop()
 end
 
+local is_playing = false
+
 function intro:update(dt)
 	-- self.angle = (self.angle + dt * math.pi/2) % (2*math.pi)
 	lib.lua_tamalib_bigstep()
-	local buf = ffi.new("uint8_t[?]", 72)
+	local buf = ffi.new("uint8_t[?]", 76)
 	lib.lua_tamalib_get_matrix_data_bin(buf)
 	-- print(dt)
 	-- local data, msg_or_ip, port_or_nil = self.udp:receivefrom()
-	local data = ffi.string(buf, 72)
+	local data = ffi.string(buf, 76)
 	-- print(data, buf, #data)
 	if data then
 		local id = love.data.unpack("I", data, 1)
@@ -106,6 +122,42 @@ function intro:update(dt)
 			end
 		end
 		icone_bin = love.data.unpack("B", data, 16*4+1+4)
+		playsound = love.data.unpack("B", data, 16*4+1+5)
+		freq = love.data.unpack("I", data, 16*4+1+8)
+		
+		if playsound == 1 then
+			if not is_playing or freq ~= last_freq then
+				print(playsound, freq)
+				local rate      = 44100 -- samples per second
+				local length    = 2  --1/32 =  0.03125 seconds
+				local tone      = freq/10 -- Hz
+				local p         = math.floor(rate/tone) -- 100 (wave length in samples)
+				local soundData = love.sound.newSoundData(math.floor(length*rate), rate, 16, 1)
+				for i=0, soundData:getSampleCount() - 1 do
+					-- soundData:setSample(i, math.sin(2*math.pi*i/p)) -- sine wave.
+					soundData:setSample(i, i%p<p/2 and 1 or -1)     -- square wave; the first half of the wave is 1, the second half is -1.
+				end
+				source = love.audio.newSource(soundData)
+				-- source:setLooping(true)
+				love.audio.play(source)
+				is_playing = true
+				last_freq = freq
+			else
+			end
+		else
+			if (is_playing) then
+				source:stop()
+				is_playing = false
+				print("stop")
+			end
+		end
+	end
+	timer = timer + dt
+	if timer > 5 then
+		save = ffi.new("uint8_t[?]", 816)
+		lib.lua_tamalib_state_save(save)
+		love.filesystem.write("save.state", ffi.string(save, 816))
+		timer = 0
 	end
 end
 
@@ -164,6 +216,11 @@ function love.keypressed(key)
 		lib.lua_tamalib_set_press_C()
 	elseif key == "space" then
 		lib.lua_tamalib_set_speed(0)
+	elseif key== "q" then
+		save = ffi.new("uint8_t[?]", 816)
+		lib.lua_tamalib_state_save(save)
+	elseif key== "w" then
+		lib.lua_tamalib_state_load(save)
 	end
 	-- local result = handle:read("*a")
 	-- handle:close()

@@ -91,6 +91,8 @@ typedef struct {
 } tama_data_bin_t;
 
 void lua_tamalib_set_speed(uint32_t speed);
+void lua_tamalib_state_save(uint8_t *buf);
+void lua_tamalib_state_load(uint8_t* buf);
 
 ]]
 )
