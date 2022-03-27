@@ -41,21 +41,15 @@ function intro:init() -- Called once, and only once, before entering the state t
 	end
 	imageData:mapPixel( pixelFunction)
 
-	-- moonshine.effects.crt
-	-- moonshine.effects.glow
-	-- moonshine.effects.chromasep
-
 	effect = moonshine(moonshine.effects.glow)
-		.chain(moonshine.effects.chromasep).chain(moonshine.effects.scanlines).chain(moonshine.effects.crt)
+		.chain(moonshine.effects.filmgrain).chain(moonshine.effects.chromasep).chain(moonshine.effects.scanlines).chain(moonshine.effects.crt)
 
 	effect.parameters = {
-		glow = {strength = 15},
+		glow = {strength = 10},
 		crt = {distortionFactor = {1.06, 1.065}},
 		chromasep = { radius=2, angle=2},
 		scanlines = { opacity = 0.4}
 	}
-	-- effect.glow.strength = 5
-	-- effect.chromasep.radius = 1
 
 
 	-- for i=1, 10 do
