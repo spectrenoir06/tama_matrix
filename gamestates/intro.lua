@@ -22,7 +22,7 @@ function intro:init() -- Called once, and only once, before entering the state t
 
 	lib.lua_tamalib_init(0)
 
-	-- local save = love.filesystem.read( "save.state")
+	local save = love.filesystem.read( "save.state")
 	-- print(save)
 	if save then
 		local c_str = ffi.new("char[?]", #save + 1)
@@ -147,7 +147,7 @@ function intro:update(dt)
 		
 		if playsound == 1 then
 			if not is_playing or freq ~= last_freq then
-				print(playsound, freq)
+				-- print(playsound, freq)
 				local rate      = 44100 -- samples per second
 				local length    = 2  --1/32 =  0.03125 seconds
 				local tone      = freq/10 -- Hz
@@ -168,7 +168,7 @@ function intro:update(dt)
 			if (is_playing) then
 				source:stop()
 				is_playing = false
-				print("stop")
+				-- print("stop")
 			end
 		end
 	end
