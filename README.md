@@ -1,4 +1,4 @@
-# tama_matrix
+# Tamagotchi Emulator
 
 Tamagotchi P1 emulator with CRT shader
 
