@@ -27,9 +27,13 @@ ffi.cdef(
 local osString = love.system.getOS()
 
 if osString == "Linux" then
-	return ffi.load("lib/tamalib/libtama.so")
+	local content = love.filesystem.read("lib/libtama.so")
+	love.filesystem.write("libtama.so", content)
+	return ffi.load(love.filesystem.getSaveDirectory().."/libtama.so")
 else
-	return ffi.load("libtama.dll")
+	local content = love.filesystem.read("lib/libtama.dll")
+	love.filesystem.write("libtama.dll", content)
+	return ffi.load(love.filesystem.getSaveDirectory().."/libtama.dll")
 end
 
 
