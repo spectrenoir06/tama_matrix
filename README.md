@@ -1,6 +1,6 @@
 # tama_matrix
 
-Tamagotchi P1 emulator with CRC shader
+Tamagotchi P1 emulator with CRT shader
 
 key:
  - A : left arrow
