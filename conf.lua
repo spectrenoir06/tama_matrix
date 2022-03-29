@@ -1,5 +1,5 @@
 function love.conf(t)
-	t.identity              = "Tamago"                      -- The name of the save directory (string)
+	t.identity              = "Tamagotchi Emulator"                      -- The name of the save directory (string)
 	t.appendidentity        = false                   -- Search files in source directory before save directory (boolean)
 	t.version               = "11.3"                  -- The LÖVE version this game was made for (string)
 	t.console               = false                   -- Attach a console (boolean, Windows only)
@@ -51,15 +51,15 @@ function love.conf(t)
 
 	t.releases = {
 		compile             = false,
-		title               = "Untitled",             -- The project title (string)
-		package             = "Untitled",             -- The project command and package name (string)
+		title               = "Tamagotchi Emulator",             -- The project title (string)
+		package             = "TamagotchiEmulator",             -- The project command and package name (string)
 		loveVersion         = "11.3",                 -- The project LÖVE version
 		version             = "0.0.1",                -- The project version
 		author              = "Spectre",              -- Your name (string)
 		email               = "antoine@doussaud.org", -- Your email (string)
 		description         = "test",                 -- The project description (string)
 		homepage            = "antoine.doussaud.org", -- The project homepage (string)
-		identifier          = "org.spectre.untitled", -- The project Uniform Type Identifier (string)
+		identifier          = "org.spectre.tamagochi", -- The project Uniform Type Identifier (string)
 		excludeFileList     = {                       -- File patterns to exclude. (string list)
 			"makefile"
 		},

@@ -11,8 +11,8 @@ local DATA_SIZE = 76
 local intro = {}
 
 function intro:init() -- Called once, and only once, before entering the state the first time
+	love.audio.setVolume(0.1)
 	lib.lua_tamalib_init(0)
-
 	local save = love.filesystem.read( "save.state")
 	if save then
 		local c_str = ffi.new("char[?]", #save + 1)
