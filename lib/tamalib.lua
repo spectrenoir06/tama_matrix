@@ -27,7 +27,7 @@ ffi.cdef(
 local osString = love.system.getOS()
 
 if osString == "Linux" then
-	local content = love.filesystem.read("lib/libtama.so")
+	local content = love.filesystem.read(jit.arch == "arm" and "lib/libtama_rpi.so" or "lib/libtama.so")
 	love.filesystem.write("libtama.so", content)
 	return ffi.load(love.filesystem.getSaveDirectory().."/libtama.so")
 else

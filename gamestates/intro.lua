@@ -49,7 +49,7 @@ function intro:init() -- Called once, and only once, before entering the state t
 		.chain(moonshine.effects.filmgrain).chain(moonshine.effects.scanlines).chain(moonshine.effects.crt).chain(moonshine.effects.chromasep)
 
 	self.effect.parameters = {
-		glow = {strength = 15},
+		glow = {strength = (jit.arch == "arm" and 0 or 15)},
 		crt = {distortionFactor = {1.06, 1.065}},
 		chromasep = { radius=4, angle=1},
 		scanlines = { opacity = 0.4, width=4},
