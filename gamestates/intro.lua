@@ -10,10 +10,53 @@ local DATA_SIZE = 76
 
 local intro = {}
 
+--[[
+RAM map
+0x00 (M0): 	Lower PC for graphics draw
+0x01 (M1): 	Upper PC for graphics draw
+0x02 (M2): 	Value ANDed with 7 that indicates which graphics page is used
+
+
+0x06 : minute ( Lower digit ) // only update in menu
+0x07 : minute ( Upper digit ) // only update in menu
+
+0x10 : second ( Lower digit )
+0x11 : second ( Upper digit )
+
+0x12 : minute ( Lower digit )
+0x13 : minute ( Upper digit )
+
+0x14 : hour ( less significant bit)
+0x15 : hour ( most significant bit x16)
+
+0x40 : hunger / 8 = (food = 4)
+0x41 : happiness / 4 = (snack = 4)
+0x43 : discipline 
+
+0x44 ?
+0x45 ? 
+
+0x46 : weight ( Lower digit )
+0x47 : weight ( Upper digit )
+0x48 : heath ( sick if > 8)
+0x49 ??
+ox4A: if >8 sleep
+0x4B : if 0 light off else light one
+0x4C ??
+0x4D : shit
+
+
+0x54 : age ( Lower digit )
+0x55 : age ( Upper digit )
+
+0x5D : stage
+
+]]
+
 function intro:init() -- Called once, and only once, before entering the state the first time
 	love.audio.setVolume(0.1)
 	lib.lua_tamalib_init(0)
-	local save = love.filesystem.read( "save.state")
+	-- local save = love.filesystem.read( "save.state")
 	if save then -- if save file exist
 		local c_str = ffi.new("char[?]", #save + 1)
 		ffi.copy(c_str, save)
@@ -198,15 +241,57 @@ function intro:draw()
 	self.image:setFilter("nearest")
 	if self.image then
 		if self.use_shader then
-			-- self.effect(function()
-			-- 	self:render()
-			-- end)
+			self.effect(function()
+				self:render()
+			end)
 		else 
 			self:render()
 		end
+		local save = ffi.new("uint8_t[?]", SAVE_SIZE)
+		lib.lua_tamalib_state_save(save)
+
+		local hour = (save[48+0x14] + save[48+0x015]*16) -- hour
+		local minute = (save[48+0x12] + save[48+0x13]*10) -- minute
+		local seconde = (save[48+0x10] + save[48+0x11]*10) -- seconde
+		love.graphics.print(string.format("hour: %02d:%02d:%02d", hour, minute, seconde), 10, 30)
+
+		local age = save[48+0x54] + save[48+0x55]*10 -- age
+		love.graphics.print("age: "..age, 10, 50)
+
+		local weight = save[48+0x46] + save[48+0x47]*10 -- weight
+		love.graphics.print("weight: "..weight, 100, 50)
+
+		local hunger = save[48+0x40] 
+		love.graphics.print("hunger: "..hunger, 10, 70)
+
+		local happiness = save[48+0x41] 
+		love.graphics.print("happiness: "..happiness, 100, 70)
+
+		local discipline = save[48+0x43]
+		love.graphics.print("discipline: "..discipline, 10, 90)
+
+		local heath = save[48+0x48]
+		love.graphics.print("heath: "..heath, 100, 90)
+
+
+		local stage = save[48+0x5D] -- stage
+		love.graphics.print("stage: "..stage, 10, 110)
+		
+		local shit = save[48+0x4D]
+		love.graphics.print("shit: "..shit, 100, 110)
+
+
+
+
+
 	end
-	love.graphics.draw(self.image, 100, 0)
-	love.graphics.print(love.timer.getFPS(), 10, 10)
+
+	
+
+	-- print(save)
+
+	-- love.graphics.draw(self.image, 100, 0)
+	love.graphics.print("fps: "..love.timer.getFPS(), 10, 10)
 end
 
 function intro:focus(focus)
@@ -226,8 +311,10 @@ end
 function intro:joystickpressed(joystick, button )
 end
 
+local previous_ram = nil
+
 function intro:keypressed(key)
-	print(key)
+	-- print(key)
 	if key == "left" then
 		lib.lua_tamalib_set_press_A()
 	elseif key == "down" then
@@ -246,6 +333,57 @@ function intro:keypressed(key)
 		self.use_shader = false
 	elseif key == 'g' then
 		self.use_shader = true
+	end
+
+	if key == "2" then
+		local save = ffi.new("uint8_t[?]", SAVE_SIZE)
+		lib.lua_tamalib_state_save(save)
+		-- for i=0, 0x280 do
+		-- 	print(i, save[48+i])
+		-- end
+		-- print hex table
+		local str = ""
+		-- clear terminal
+		os.execute("clear")
+		local header = "    | "
+		for i = 0, 15 do
+			header = header .. string.format("%01X ", i)
+		end
+		print(header)
+		print(string.rep("-", #header))
+		for i=0, 0x280 do
+			local val = string.format("%01X ", save[48+i])
+			-- if previous_ram and save[48+i] == previous_ram[48+i] then
+			-- 	val = "   "
+			-- end
+			str = str .. val
+			if (i%16 == 15) then
+				print(string.format("%03X | ", i - 0xF) .. str)
+				-- print(str)
+				str = ""
+			end
+		end
+
+		local str = ""
+		local header = "    | "
+		for i = 0, 15 do
+			header = header .. string.format("%01X ", i)
+		end
+		print(header)
+		print(string.rep("-", #header).."\n")
+		for i=0, 0x280 do
+			local val = string.format("%01X ", save[48+i])
+			if previous_ram and save[48+i] == previous_ram[48+i] then
+				val = "  "
+			end
+			str = str .. val
+			if (i%16 == 15) then
+				print(string.format("%03X | ", i - 0xF) .. str)
+				-- print(str)
+				str = ""
+			end
+		end
+		previous_ram = save
 	end
 	
 
@@ -270,7 +408,7 @@ function intro:keyreleased( key )
 end
 
 function intro:resize(x,y) 
-	-- self.effect.resize(x, y)
+	self.effect.resize(x, y)
 	self.need_reload_shader = true
 end
 
