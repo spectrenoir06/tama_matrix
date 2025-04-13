@@ -528,7 +528,7 @@ void lua_tamalib_state_load(uint8_t* buf) {
 		state->memory[i + MEM_IO_ADDR] = buf[ctn++] & 0xF;
 	}
 
-	printf("load %d\n", ctn);
+	// printf("load %d\n", ctn);
 
 	tamalib_refresh_hw();
 }

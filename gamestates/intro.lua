@@ -10,6 +10,19 @@ local DATA_SIZE = 76
 
 local intro = {}
 
+function dump(o)
+	if type(o) == 'table' then
+	   local s = '{ '
+	   for k,v in pairs(o) do
+		  if type(k) ~= 'number' then k = '"'..k..'"' end
+		  s = s .. '['..k..'] = ' .. dump(v) .. ','
+	   end
+	   return s .. '} '
+	else
+	   return tostring(o)
+	end
+ end
+
 --[[
 RAM map
 0x00 (M0): 	Lower PC for graphics draw
@@ -29,9 +42,17 @@ RAM map
 0x14 : hour ( less significant bit)
 0x15 : hour ( most significant bit x16)
 
+0x2F : couter ? ( less significant bit)
+0x30 : counter 
+0x31 : counter ( most significant bit)
+
+0x32 : counter 2 ( less significant bit)
+0x33 : counter 2 ( most significant bit)
+
 0x40 : hunger / 8 = (food = 4)
 0x41 : happiness / 4 = (snack = 4)
-0x43 : discipline 
+0x42 : care (start a 0 at 10 die ?)
+0x43 : discipline
 
 0x44 ?
 0x45 ? 
@@ -48,15 +69,26 @@ ox4A: if >8 sleep
 
 0x54 : age ( Lower digit )
 0x55 : age ( Upper digit )
+0x57 : timeout menu
 
+0x5C make it sleep ?
 0x5D : stage
+
+0x75 : menu select
+0x76 : 2 if submenu else 8
+
+0x90 : if 7 then select menu 0 else if f then menu 1 
+
+
+food select
+
 
 ]]
 
 function intro:init() -- Called once, and only once, before entering the state the first time
 	love.audio.setVolume(0.1)
 	lib.lua_tamalib_init(0)
-	-- local save = love.filesystem.read( "save.state")
+	local save = love.filesystem.read( "save.state")
 	if save then -- if save file exist
 		local c_str = ffi.new("char[?]", #save + 1)
 		ffi.copy(c_str, save)
@@ -73,9 +105,28 @@ function intro:init() -- Called once, and only once, before entering the state t
 
 	self.icones = {}
 	for i=0,7 do
-		self.icones[i] = love.graphics.newImage( "res/icone"..i..".png")
+		self.icones[i] = love.graphics.newImage("res/icone"..i..".png")
 		self.icones[i]:setFilter("nearest")
 	end
+
+	self.font = love.graphics.newImageFont("res/decimal_font.png", "0123456789:", 1)
+	self.font:setFilter("nearest")
+
+	self.weight_icon = love.graphics.newImage("res/weight.png")
+	self.weight_icon:setFilter("nearest")
+
+	self.age_icon = love.graphics.newImage("res/age.png")
+	self.age_icon:setFilter("nearest")
+
+	self.food_icon = love.graphics.newImage("res/food.png")
+	self.food_icon:setFilter("nearest")
+
+	self.snack_icon = love.graphics.newImage("res/snack.png")
+	self.snack_icon:setFilter("nearest")
+
+	self.shit_icon = love.graphics.newImage("res/shit.png")
+	self.shit_icon:setFilter("nearest")
+
 
 	self.icone_bin = 0
 
@@ -90,6 +141,10 @@ function intro:init() -- Called once, and only once, before entering the state t
 
 	self:reload_shader()
 	self.is_playing = false
+
+	self.icone_warning = false
+
+	self.queue = {}
 end
 
 function intro:enter(previous) -- Called every time when entering the state
@@ -116,6 +171,7 @@ function intro:reload_shader()
 end
 
 function intro:update(dt)
+	-- print(dt)
 	local data, msg_or_ip, port_or_nil = self.udp:receivefrom()
 	if data then
 		print(data)
@@ -134,6 +190,56 @@ function intro:update(dt)
 		end
 	end
 
+	if #self.queue > 0 then
+		-- print(dump(self.queue))
+		local event = self.queue[1]
+		if event.exe then
+			event.exe()
+			event.exe = nil
+		end
+		if event.delay > 0 then
+			event.delay = event.delay - dt
+		end
+		if event.delay <= 0 then
+			-- print("remove")
+			table.remove(self.queue, 1)
+		end
+	else
+		info = self:getTamaInfo()
+		if (self.icone_warning or info.shit > 0 or info.is_sick) and self.speed_up then
+			self.speed_up = false
+			lib.lua_tamalib_set_speed(1)
+		end
+		-- print(info.stage)
+		if not self.speed_up then
+			if info.stage > 0 then -- is alive
+				if info.is_sleeping == false then -- is not sleeping
+					if info.is_sick then
+						self:tamaHeal()
+					elseif info.shit > 0 then
+						self:tamaClean()
+					elseif self.icone_warning and info.hunger > 0 and info.happiness > 0 then -- is a bitch
+						self:tamaDiscipline()
+					elseif info.hunger < 13 then
+						self:tamaFeed()
+					elseif info.happiness < 13 then
+						self:tamaSnack()
+					else
+						self.speed_up = true
+						lib.lua_tamalib_set_speed(0)
+					end
+				else
+					if info.is_light_on then
+						self:tamaTurnLightOff()
+					else
+						self.speed_up = true
+						lib.lua_tamalib_set_speed(0)
+					end
+				end
+			end
+		end
+	end
+
 
 	lib.lua_tamalib_bigstep() -- calculate tamagotchi
 	local buf = ffi.new("uint8_t[?]", DATA_SIZE)
@@ -141,6 +247,7 @@ function intro:update(dt)
 
 	local data = ffi.string(buf, DATA_SIZE)
 	if data then
+		-- print("data")
 		local id = love.data.unpack("I", data, 1)
 		local off_x = (id*32)%320
 		local off_y = math.floor(id/10)*16
@@ -185,6 +292,27 @@ function intro:update(dt)
 				self.is_playing = false
 			end
 		end
+
+		-- self.print_ram()
+
+		if bit.band(self.icone_bin, 0x80) == 0x80 then
+			if self.icone_warning == false then -- if the warning icone turn on
+				-- print("warning")
+				self.icone_warning = true
+			else 
+			end
+		else
+			if self.icone_warning == true then -- if the warning icone turn off
+				-- print("no warning")
+				self.icone_warning = false
+				-- self.print_ram()
+			else 
+				
+			end
+		end
+
+
+
 	end
 	timer = timer + dt
 	if timer > 5 then
@@ -195,6 +323,7 @@ function intro:update(dt)
 		if self.need_reload_shader then
 			self:reload_shader()
 		end
+
 	end
 end
 
@@ -236,6 +365,344 @@ function intro:render()
 	end
 end
 
+function intro:getTamaInfo()
+	local save = ffi.new("uint8_t[?]", SAVE_SIZE)
+	lib.lua_tamalib_state_save(save)
+
+	local hour = (save[48+0x14] + save[48+0x015]*16) -- hour
+	local minute = (save[48+0x12] + save[48+0x13]*10) -- minute
+	local seconde = (save[48+0x10] + save[48+0x11]*10) -- seconde
+	
+	-- love.graphics.print(string.format("hour: %02d:%02d:%02d", hour, minute, seconde), 10, 30)
+
+	local age = save[48+0x54] + save[48+0x55]*10 -- age
+		-- love.graphics.print("age: "..age, 10, 50)
+
+	local weight = save[48+0x46] + save[48+0x47]*10 -- weight
+	-- love.graphics.print("weight: "..weight, 100, 50)
+
+	local hunger = save[48+0x40] 
+	-- love.graphics.print("hunger: "..hunger, 10, 70)
+
+	local happiness = save[48+0x41] 
+	-- love.graphics.print("happiness: "..happiness, 100, 70)
+
+	local discipline = save[48+0x43]
+	-- love.graphics.print("discipline: "..discipline, 10, 90)
+
+	local health = save[48+0x48]
+	-- love.graphics.print("health: "..health, 100, 90)
+
+
+	local stage = save[48+0x5D] -- stage
+	-- love.graphics.print("stage: "..stage, 10, 110)
+	
+	local shit = save[48+0x4D]
+	-- love.graphics.print("shit: "..shit, 100, 110)
+
+	local care = save[48+0x42]
+	-- love.graphics.print("care: "..care, 100, 130)
+
+	local ctn = save[48+0x2c]
+	-- love.graphics.print("ctn: "..ctn, 100, 150)
+
+	local ctn2 = save[48+0x2d]
+	-- love.graphics.print("ctn2: "..ctn2, 100, 170)
+
+	local sleep = save[48+0x4A]
+
+	local light = save[48+0x4B]
+
+	return {
+		hour = hour,
+		minute = minute,
+		seconde = seconde,
+
+		age = age,
+		weight = weight,
+		hunger = hunger,
+		happiness = happiness,
+		discipline = discipline,
+		stage = stage,
+		shit = shit,
+		care = care,
+		is_sleeping = sleep >= 8,
+		is_light_on = light == 0xF,
+		is_sick = health > 8
+	}
+end 
+
+function intro:tamaFeed()
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x57, 0xA) -- timeout reset
+			self:tamaSetRegister(0x75, 0x1) -- select food
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B()
+			print("open food menu")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_release_B() -- press b to open submenu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x75, 0x0) -- select food
+			print("select food")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B() -- press b to open submenu
+			print("press b")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 6,
+		exe = function()
+			lib.lua_tamalib_set_release_B() -- press b to feed
+			print("release b")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_C() -- press b to open submenu
+			print("press c")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_release_C() -- press b to feed
+			print("release c")
+		end
+	}
+end
+
+function intro:tamaSnack()
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x57, 0xA) -- timeout reset
+			self:tamaSetRegister(0x75, 0x1) -- select food
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B()
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_release_B() -- press b to open submenu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x75, 0x1) -- select snack
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B() -- press b to open submenu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 6,
+		exe = function()
+			lib.lua_tamalib_set_release_B() -- press b to feed
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_C() -- close all menu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_release_C() -- close all menu
+		end
+	}
+end
+
+function intro:tamaClean()
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x57, 0xA) -- timeout reset
+			self:tamaSetRegister(0x75, 0x5) -- select clean
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B() -- clean
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 6,
+		exe = function()
+			lib.lua_tamalib_set_release_B()
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_C() -- close all menu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 1,
+		exe = function()
+			lib.lua_tamalib_set_release_C() -- close all menu
+		end
+	}
+end
+
+function intro:tamaHeal()
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x57, 0xA) -- timeout reset
+			self:tamaSetRegister(0x75, 0x4) -- select heal
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B() -- heal
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 6,
+		exe = function()
+			lib.lua_tamalib_set_release_B()
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_C() -- close all menu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_release_C() -- close all menu
+		end
+	}
+end
+
+
+function intro:tamaDiscipline()
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x57, 0xA) -- timeout reset
+			self:tamaSetRegister(0x75, 0x7) -- select discipline
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B() -- discipline
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 6,
+		exe = function()
+			lib.lua_tamalib_set_release_B()
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_C() -- close all menu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_release_C() -- close all menu
+		end
+	}
+end
+
+function intro:tamaTurnLightOff()
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x57, 0xA) -- timeout reset
+			self:tamaSetRegister(0x75, 0x2) -- select light
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B()
+			print("open light menu")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_release_B() -- press b to open submenu
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			self:tamaSetRegister(0x75, 0x1) -- select food
+			print("select off")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_B() -- press b to open submenu
+			print("press b")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 6,
+		exe = function()
+			lib.lua_tamalib_set_release_B() -- press b to feed
+			print("release b")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 0.5,
+		exe = function()
+			lib.lua_tamalib_set_press_C() -- press b to open submenu
+			print("press c")
+		end
+	}
+	self.queue[#self.queue + 1] = {
+		delay = 1,
+		exe = function()
+			lib.lua_tamalib_set_release_C() -- press b to feed
+			print("release c")
+		end
+	}
+end
+
 function intro:draw()
 	self.image = love.graphics.newImage(self.imageData)
 	self.image:setFilter("nearest")
@@ -247,40 +714,40 @@ function intro:draw()
 		else 
 			self:render()
 		end
-		local save = ffi.new("uint8_t[?]", SAVE_SIZE)
-		lib.lua_tamalib_state_save(save)
-
-		local hour = (save[48+0x14] + save[48+0x015]*16) -- hour
-		local minute = (save[48+0x12] + save[48+0x13]*10) -- minute
-		local seconde = (save[48+0x10] + save[48+0x11]*10) -- seconde
-		love.graphics.print(string.format("hour: %02d:%02d:%02d", hour, minute, seconde), 10, 30)
-
-		local age = save[48+0x54] + save[48+0x55]*10 -- age
-		love.graphics.print("age: "..age, 10, 50)
-
-		local weight = save[48+0x46] + save[48+0x47]*10 -- weight
-		love.graphics.print("weight: "..weight, 100, 50)
-
-		local hunger = save[48+0x40] 
-		love.graphics.print("hunger: "..hunger, 10, 70)
-
-		local happiness = save[48+0x41] 
-		love.graphics.print("happiness: "..happiness, 100, 70)
-
-		local discipline = save[48+0x43]
-		love.graphics.print("discipline: "..discipline, 10, 90)
-
-		local heath = save[48+0x48]
-		love.graphics.print("heath: "..heath, 100, 90)
 
 
-		local stage = save[48+0x5D] -- stage
-		love.graphics.print("stage: "..stage, 10, 110)
+		love.graphics.scale(2, 2)
+
+		info = self:getTamaInfo()
 		
-		local shit = save[48+0x4D]
-		love.graphics.print("shit: "..shit, 100, 110)
+		-- love.graphics.setFont(8)
 
 
+		love.graphics.reset()
+
+		-- love.graphics.
+		love.graphics.scale(10, 10)
+		love.graphics.setFont(self.font)
+
+		love.graphics.print(string.format("%02d:%02d:%02d", info.hour, info.minute, info.seconde), 2, 0)
+
+		love.graphics.draw(self.weight_icon, 10, 10)
+		love.graphics.print(info.weight, 22, 11)
+
+		love.graphics.draw(self.age_icon, 11, 21)
+		love.graphics.print(info.age, 22, 20)
+
+		love.graphics.draw(self.food_icon, 10, 30)
+		love.graphics.print(info.hunger, 22, 30)
+
+		love.graphics.draw(self.snack_icon, 10, 40)
+		love.graphics.print(info.happiness, 22, 40)
+
+		love.graphics.draw(self.shit_icon, 10, 49)
+		love.graphics.print(info.shit, 22, 50)
+
+		love.graphics.print(info.discipline, 10, 60)
+		love.graphics.print(info.care, 10 , 70) 
 
 
 
@@ -291,7 +758,7 @@ function intro:draw()
 	-- print(save)
 
 	-- love.graphics.draw(self.image, 100, 0)
-	love.graphics.print("fps: "..love.timer.getFPS(), 10, 10)
+	-- love.graphics.print("fps: "..love.timer.getFPS(), 10, 10)
 end
 
 function intro:focus(focus)
@@ -313,6 +780,63 @@ end
 
 local previous_ram = nil
 
+function intro:print_ram()
+	local save = ffi.new("uint8_t[?]", SAVE_SIZE)
+	lib.lua_tamalib_state_save(save)
+
+	-- for i=0, 0x280 do
+	-- 	print(i, save[48+i])
+	-- end
+	-- print hex table
+	local str = ""
+	-- clear terminal
+	os.execute("clear")
+	-- print("\n\n\n")
+	local header = "    | "
+	for i = 0, 15 do
+		header = header .. string.format("%01X ", i)
+	end
+	print(header)
+	print(string.rep("-", #header))
+	for i=0, 0x80 do
+		local val = string.format("%01X ", save[48+i])
+		str = str .. val
+		if (i%16 == 15) then
+			print(string.format("%03X | ", i - 0xF) .. str)
+			-- print(str)
+			str = ""
+		end
+	end
+
+	-- local str = ""
+	-- local header = "    | "
+	-- for i = 0, 15 do
+	-- 	header = header .. string.format("%01X ", i)
+	-- end
+	-- print(header)
+	-- print(string.rep("-", #header).."\n")
+	-- for i=0, 0x80 do
+	-- 	local val = string.format("%01X ", save[48+i])
+	-- 	if previous_ram and save[48+i] == previous_ram[48+i] then
+	-- 		val = "  "
+	-- 	end
+	-- 	str = str .. val
+	-- 	if (i%16 == 15) then
+	-- 		print(string.format("%03X | ", i - 0xF) .. str)
+	-- 		-- print(str)
+	-- 		str = ""
+	-- 	end
+	-- end
+	-- previous_ram = save
+end
+
+function intro:tamaSetRegister(register, value)
+	local save = ffi.new("uint8_t[?]", SAVE_SIZE)
+	lib.lua_tamalib_state_save(save)
+	save[48+register] = value
+	lib.lua_tamalib_state_load(save) -- load save in tamagotchi
+end
+
 function intro:keypressed(key)
 	-- print(key)
 	if key == "left" then
@@ -322,6 +846,7 @@ function intro:keypressed(key)
 	elseif key == "right" then
 		lib.lua_tamalib_set_press_C()
 	elseif key == "space" then
+		self.speed_up = true
 		lib.lua_tamalib_set_speed(0)
 	-- elseif key== "q" then
 	-- 	save = ffi.new("uint8_t[?]", SAVE_SIZE)
@@ -336,54 +861,47 @@ function intro:keypressed(key)
 	end
 
 	if key == "2" then
-		local save = ffi.new("uint8_t[?]", SAVE_SIZE)
-		lib.lua_tamalib_state_save(save)
-		-- for i=0, 0x280 do
-		-- 	print(i, save[48+i])
-		-- end
-		-- print hex table
-		local str = ""
-		-- clear terminal
-		os.execute("clear")
-		local header = "    | "
-		for i = 0, 15 do
-			header = header .. string.format("%01X ", i)
-		end
-		print(header)
-		print(string.rep("-", #header))
-		for i=0, 0x280 do
-			local val = string.format("%01X ", save[48+i])
-			-- if previous_ram and save[48+i] == previous_ram[48+i] then
-			-- 	val = "   "
-			-- end
-			str = str .. val
-			if (i%16 == 15) then
-				print(string.format("%03X | ", i - 0xF) .. str)
-				-- print(str)
-				str = ""
-			end
-		end
+		self:tamaClean()
+	end
 
-		local str = ""
-		local header = "    | "
-		for i = 0, 15 do
-			header = header .. string.format("%01X ", i)
-		end
-		print(header)
-		print(string.rep("-", #header).."\n")
-		for i=0, 0x280 do
-			local val = string.format("%01X ", save[48+i])
-			if previous_ram and save[48+i] == previous_ram[48+i] then
-				val = "  "
-			end
-			str = str .. val
-			if (i%16 == 15) then
-				print(string.format("%03X | ", i - 0xF) .. str)
-				-- print(str)
-				str = ""
-			end
-		end
-		previous_ram = save
+	if key == "4" then
+		self:tamaSnack()
+	end
+
+	if key == "5" then
+		self:tamaFeed()
+	end
+
+	if key == "6" then
+		self:tamaDiscipline()
+	end
+
+	if key == "3" then
+		-- local save = ffi.new("uint8_t[?]", SAVE_SIZE)
+		-- lib.lua_tamalib_state_save(save)
+		
+		local hour   = tonumber(os.date("%H"))
+		local minute = tonumber(os.date("%M"))
+		local second = tonumber(os.date("%S"))
+		
+		-- save[48+0x14] = hour%16
+		-- save[48+0x015] = math.floor(hour/16)
+		self:tamaSetRegister(0x14, hour%16)
+		self:tamaSetRegister(0x15, math.floor(hour/16))
+
+
+		-- save[48+0x12] = minute%10
+		-- save[48+0x13] = math.floor(minute/10)
+		self:tamaSetRegister(0x12, minute%10)
+		self:tamaSetRegister(0x13, math.floor(minute/10))
+
+		-- save[48+0x10] = second%10
+		-- save[48+0x11] = math.floor(second/10)
+		self:tamaSetRegister(0x10, second%10)
+		self:tamaSetRegister(0x11, math.floor(second/10))
+
+
+		-- lib.lua_tamalib_state_load(save) -- load save in tamagotchi
 	end
 	
 
@@ -400,6 +918,7 @@ function intro:keyreleased( key )
 	elseif key == "right" then
 		lib.lua_tamalib_set_release_C()
 	elseif key == "space" then
+		self.speed_up = false
 		lib.lua_tamalib_set_speed(1)
 	end
 	-- if key == "space" then
